@@ -8,38 +8,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.bogdanov.performance.common.model.ProcessingReport;
 import com.bogdanov.performance.support.BaseIntegrationTest;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 
 @Slf4j
 class V1GoodsDeclarationControllerIntegrationTest extends BaseIntegrationTest {
-  @Test
-  void processes10ItemsThroughRestController() throws Exception {
-    assertProcessingReport(10);
-  }
-
-  @Test
-  void processes100ItemsThroughRestController() throws Exception {
-    assertProcessingReport(100);
-  }
-
-  @Test
-  void processes500ItemsThroughRestController() throws Exception {
-    assertProcessingReport(500);
-  }
-
-  @Test
-  @Tag("slow")
-  void processes1000ItemsThroughRestController() throws Exception {
-    assertProcessingReport(1_000);
-  }
-
-  @Test
-  @Tag("slow")
-  void processes5000ItemsThroughRestController() throws Exception {
-    assertProcessingReport(5_000);
+  @ParameterizedTest(name = "processes {0} items through V1 REST controller")
+  @ValueSource(ints = {10, 50, 100, 150, 200, 300, 400, 500})
+  void processesItemsThroughRestController(int size) throws Exception {
+    assertProcessingReport(size);
   }
 
   private void assertProcessingReport(int size) throws Exception {

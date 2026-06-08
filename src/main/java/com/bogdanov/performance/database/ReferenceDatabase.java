@@ -4,6 +4,8 @@ import com.bogdanov.performance.common.model.GoodsCategoryRiskKey;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.sql.Connection;
@@ -11,6 +13,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.stream.Collectors;
 import javax.sql.DataSource;
 
 import lombok.RequiredArgsConstructor;
@@ -123,43 +126,62 @@ public class ReferenceDatabase implements AutoCloseable {
     }
   }
 
-  public Set<String> findAllSenderReferences() throws SQLException {
+  public Set<String> findSenderReferences(Collection<String> references) throws SQLException {
     queryCount++;
     Set<String> result = new HashSet<>();
-    try (PreparedStatement statement = connection.prepareStatement("select reference from sender");
-         ResultSet resultSet = statement.executeQuery()) {
-      while (resultSet.next()) {
-        result.add(resultSet.getString("reference"));
+    try (PreparedStatement statement = connection.prepareStatement(
+      "select reference from sender where reference in (" + placeholders(references.size()) + ")")) {
+      int index = 1;
+      for (String reference : references) {
+        statement.setString(index++, reference);
+      }
+      try (ResultSet resultSet = statement.executeQuery()) {
+        while (resultSet.next()) {
+          result.add(resultSet.getString("reference"));
+        }
       }
     }
     return result;
   }
 
-  public Set<String> findAllReceiverReferences() throws SQLException {
+  public Set<String> findReceiverReferences(Collection<String> references) throws SQLException {
     queryCount++;
     Set<String> result = new HashSet<>();
-    try (PreparedStatement statement = connection.prepareStatement("select reference from receiver");
-         ResultSet resultSet = statement.executeQuery()) {
-      while (resultSet.next()) {
-        result.add(resultSet.getString("reference"));
+    try (PreparedStatement statement = connection.prepareStatement(
+      "select reference from receiver where reference in (" + placeholders(references.size()) + ")")) {
+      int index = 1;
+      for (String reference : references) {
+        statement.setString(index++, reference);
+      }
+      try (ResultSet resultSet = statement.executeQuery()) {
+        while (resultSet.next()) {
+          result.add(resultSet.getString("reference"));
+        }
       }
     }
     return result;
   }
 
-  public Set<GoodsCategoryRiskKey> findAllGoodsCategoryRiskPairs() throws SQLException {
+  public Set<GoodsCategoryRiskKey> findGoodsCategoryRiskPairs(Collection<GoodsCategoryRiskKey> pairs) throws SQLException {
     queryCount++;
     Set<GoodsCategoryRiskKey> result = new HashSet<>();
     try (PreparedStatement statement = connection.prepareStatement("""
       select goods_category_code, risk_assessment_code
       from category_risk_compatibility
-      """);
-         ResultSet resultSet = statement.executeQuery()) {
-      while (resultSet.next()) {
-        result.add(new GoodsCategoryRiskKey(
-          resultSet.getString("goods_category_code"),
-          resultSet.getString("risk_assessment_code")
-        ));
+      where (goods_category_code, risk_assessment_code) in (
+      """ + tuplePlaceholders(pairs.size()) + ")")) {
+      int index = 1;
+      for (GoodsCategoryRiskKey pair : pairs) {
+        statement.setString(index++, pair.goodsCategoryCode());
+        statement.setString(index++, pair.riskAssessmentCode());
+      }
+      try (ResultSet resultSet = statement.executeQuery()) {
+        while (resultSet.next()) {
+          result.add(GoodsCategoryRiskKey.of(
+            resultSet.getString("goods_category_code"),
+            resultSet.getString("risk_assessment_code")
+          ));
+        }
       }
     }
     return result;
@@ -248,5 +270,15 @@ public class ReferenceDatabase implements AutoCloseable {
 
   private static String padded(int value, int width) {
     return String.format("%0" + width + "d", value);
+  }
+
+  private static String placeholders(int count) {
+    return String.join(", ", Collections.nCopies(count, "?"));
+  }
+
+  private static String tuplePlaceholders(int count) {
+    return Collections.nCopies(count, "(?, ?)")
+      .stream()
+      .collect(Collectors.joining(", "));
   }
 }

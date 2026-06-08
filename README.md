@@ -29,13 +29,13 @@ V1 is intentionally wrong: for every declaration it performs three full scans of
 
 For a single declaration this is still at least three database calls. For larger batches the database calls grow quadratically.
 
-V2 keeps the same response contract but loads reference data once:
+V2 keeps the same response contract but loads only the requested reference data in 1000-record batches:
 
 ```text
-3 database queries per request
+3 database queries per 1000-record batch
 ```
 
-The CPU work is still a simple input scan, but the database layer no longer grows with the input size.
+Each batch uses `where ... in (...)` queries for sender references, receiver references, and goods category/risk pairs. The CPU work is still a simple input scan, but the database layer no longer performs per-record lookups.
 
 ## Local PostgreSQL
 
@@ -121,4 +121,4 @@ The V1 5000 item test performs:
 3 * 5000 * 5000 = 75,000,000 database queries
 ```
 
-The V2 5000 item test performs only 3 database queries.
+The V2 5000 item test performs only 15 database queries.

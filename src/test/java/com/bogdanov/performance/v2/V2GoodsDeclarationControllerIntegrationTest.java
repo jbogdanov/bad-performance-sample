@@ -8,21 +8,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.bogdanov.performance.common.model.ProcessingReport;
 import com.bogdanov.performance.support.BaseIntegrationTest;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 
 @Slf4j
 class V2GoodsDeclarationControllerIntegrationTest extends BaseIntegrationTest {
-  @Test
-  void processes5000ItemsThroughRestControllerWithConstantDatabaseQueries() throws Exception {
+  @ParameterizedTest(name = "processes {0} items through V2 REST controller")
+  @ValueSource(ints = {10, 50, 100, 150, 200, 300, 400, 500, 1_000, 3_000, 5_000})
+  void processesItemsThroughRestControllerWithConstantDatabaseQueries(int size) throws Exception {
+    long expectedQueries = 3L * ((size + 999) / 1_000);
+
     MvcResult result = mockMvc.perform(post("/api/v2/declarations/process")
         .contentType(MediaType.APPLICATION_JSON)
-        .content(allDeclarationsJson()))
+        .content(declarationsJson(size)))
       .andExpect(status().isOk())
-      .andExpect(jsonPath("$.records").value(5_000))
-      .andExpect(jsonPath("$.validRecords").value(5_000))
-      .andExpect(jsonPath("$.databaseQueries").value(3))
+      .andExpect(jsonPath("$.records").value(size))
+      .andExpect(jsonPath("$.validRecords").value(size))
+      .andExpect(jsonPath("$.databaseQueries").value(expectedQueries))
       .andReturn();
 
     ProcessingReport report = readReport(result);
