@@ -8,7 +8,4 @@ public record GoodsCategoryRiskKey(
     return new GoodsCategoryRiskKey(goodsCategoryCode, riskAssessmentCode);
   }
 
-  public static GoodsCategoryRiskKey from(GoodsDeclaration declaration) {
-    return of(declaration.goodsCategoryCode(), declaration.riskAssessmentCode());
-  }
 }

@@ -59,7 +59,7 @@ public class OptimizedDeclarationProcessor {
       .collect(Collectors.toSet());
 
     Set<GoodsCategoryRiskKey> requestedCategoryRiskPairs = declarations.stream()
-      .map(GoodsCategoryRiskKey::from)
+      .map(declaration1 -> GoodsCategoryRiskKey.of(declaration1.goodsCategoryCode(), declaration1.riskAssessmentCode()))
       .collect(Collectors.toSet());
 
     Set<String> senderReferences = database.findSenderReferences(requestedSenderReferences);
@@ -70,7 +70,7 @@ public class OptimizedDeclarationProcessor {
     for (GoodsDeclaration declaration : declarations) {
       boolean valid = senderReferences.contains(declaration.senderReference())
         && receiverReferences.contains(declaration.receiverReference())
-        && categoryRiskPairs.contains(GoodsCategoryRiskKey.from(declaration));
+        && categoryRiskPairs.contains(GoodsCategoryRiskKey.of(declaration.goodsCategoryCode(), declaration.riskAssessmentCode()));
 
       if (valid) {
         validRecords++;
