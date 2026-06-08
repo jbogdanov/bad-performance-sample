@@ -1,0 +1,10 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: bad-performance-postgres
+    environment:
+      POSTGRES_DB: customs
+      POSTGRES_USER: customs
+      POSTGRES_PASSWORD: customs
+    ports:
+      - "15432:5432"
