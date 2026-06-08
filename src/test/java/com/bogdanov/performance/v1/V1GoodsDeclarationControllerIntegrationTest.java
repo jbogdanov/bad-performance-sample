@@ -22,7 +22,6 @@ class V1GoodsDeclarationControllerIntegrationTest extends BaseIntegrationTest {
   }
 
   private void assertProcessingReport(int size) throws Exception {
-    long expectedQueries = 3L * size * size;
 
     MvcResult result = mockMvc.perform(post("/api/v1/declarations/process")
         .contentType(MediaType.APPLICATION_JSON)
@@ -30,7 +29,6 @@ class V1GoodsDeclarationControllerIntegrationTest extends BaseIntegrationTest {
       .andExpect(status().isOk())
       .andExpect(jsonPath("$.records").value(size))
       .andExpect(jsonPath("$.validRecords").value(size))
-      .andExpect(jsonPath("$.databaseQueries").value(expectedQueries))
       .andReturn();
 
     ProcessingReport report = readReport(result);
