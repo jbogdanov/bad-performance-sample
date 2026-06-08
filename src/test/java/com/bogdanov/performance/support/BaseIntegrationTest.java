@@ -1,11 +1,16 @@
 package com.bogdanov.performance.support;
 
+import com.bogdanov.performance.common.business.SplitConsignmentPolicy;
 import com.bogdanov.performance.common.io.GoodsDeclarationCsvReader;
 import com.bogdanov.performance.common.model.GoodsDeclaration;
 import com.bogdanov.performance.common.model.ProcessingReport;
+import com.bogdanov.performance.common.model.TradeFlowKey;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeAll;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -19,6 +24,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
 @SpringBootTest
 @AutoConfigureMockMvc
 public abstract class BaseIntegrationTest {
+  private static final BigDecimal MANUAL_REVIEW_THRESHOLD = new BigDecimal("10000.00");
+
   private static final Path INPUT_FILE = Path.of("src/main/resources/data/goods-declarations-5000.csv");
   private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
     .withDatabaseName("customs")
@@ -63,5 +70,23 @@ public abstract class BaseIntegrationTest {
       result.getResponse().getContentAsString(),
       ProcessingReport.class
     );
+  }
+
+  protected int expectedManualReviewRecords(int size) {
+    List<GoodsDeclaration> batch = declarations.subList(0, size);
+    Map<TradeFlowKey, BigDecimal> declaredValueByTradeFlow = batch.stream()
+      .collect(Collectors.groupingBy(
+        TradeFlowKey::from,
+        Collectors.reducing(BigDecimal.ZERO, GoodsDeclaration::declaredValue, BigDecimal::add)
+      ));
+
+    int manualReviewRecords = 0;
+    for (GoodsDeclaration declaration : batch) {
+      BigDecimal combinedDeclaredValue = declaredValueByTradeFlow.get(TradeFlowKey.from(declaration));
+      if (SplitConsignmentPolicy.requiresManualReview(combinedDeclaredValue, MANUAL_REVIEW_THRESHOLD)) {
+        manualReviewRecords++;
+      }
+    }
+    return manualReviewRecords;
   }
 }

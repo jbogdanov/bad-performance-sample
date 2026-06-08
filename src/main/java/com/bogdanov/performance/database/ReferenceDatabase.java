@@ -1,12 +1,17 @@
 package com.bogdanov.performance.database;
 
 import com.bogdanov.performance.common.model.GoodsCategoryRiskKey;
+import com.bogdanov.performance.common.model.SplitConsignmentRuleKey;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -38,6 +43,7 @@ public class ReferenceDatabase implements AutoCloseable {
   public void seedReferenceData() throws SQLException {
     try (Statement statement = connection.createStatement()) {
       statement.execute("drop table if exists category_risk_compatibility");
+      statement.execute("drop table if exists split_consignment_rule");
       statement.execute("drop table if exists risk_assessment");
       statement.execute("drop table if exists goods_category");
       statement.execute("drop table if exists receiver");
@@ -75,6 +81,14 @@ public class ReferenceDatabase implements AutoCloseable {
             primary key (goods_category_code, risk_assessment_code)
         )
         """);
+      statement.execute("""
+        create table split_consignment_rule (
+            goods_category_code varchar(20) not null,
+            origin_country varchar(2) not null,
+            manual_review_threshold numeric(12, 2) not null,
+            primary key (goods_category_code, origin_country)
+        )
+        """);
     }
 
     insertSenders();
@@ -82,6 +96,7 @@ public class ReferenceDatabase implements AutoCloseable {
     insertGoodsCategories();
     insertRiskAssessments();
     insertCategoryRiskCompatibility();
+    insertSplitConsignmentRules();
   }
 
   public boolean senderExists(String reference) throws SQLException {
@@ -127,6 +142,9 @@ public class ReferenceDatabase implements AutoCloseable {
   }
 
   public Set<String> findSenderReferences(Collection<String> references) throws SQLException {
+    if (references.isEmpty()) {
+      return Set.of();
+    }
     queryCount++;
     Set<String> result = new HashSet<>();
     try (PreparedStatement statement = connection.prepareStatement(
@@ -145,6 +163,9 @@ public class ReferenceDatabase implements AutoCloseable {
   }
 
   public Set<String> findReceiverReferences(Collection<String> references) throws SQLException {
+    if (references.isEmpty()) {
+      return Set.of();
+    }
     queryCount++;
     Set<String> result = new HashSet<>();
     try (PreparedStatement statement = connection.prepareStatement(
@@ -163,6 +184,9 @@ public class ReferenceDatabase implements AutoCloseable {
   }
 
   public Set<GoodsCategoryRiskKey> findGoodsCategoryRiskPairs(Collection<GoodsCategoryRiskKey> pairs) throws SQLException {
+    if (pairs.isEmpty()) {
+      return Set.of();
+    }
     queryCount++;
     Set<GoodsCategoryRiskKey> result = new HashSet<>();
     try (PreparedStatement statement = connection.prepareStatement("""
@@ -181,6 +205,56 @@ public class ReferenceDatabase implements AutoCloseable {
             resultSet.getString("goods_category_code"),
             resultSet.getString("risk_assessment_code")
           ));
+        }
+      }
+    }
+    return result;
+  }
+
+  public Optional<BigDecimal> findSplitConsignmentThreshold(String goodsCategoryCode, String originCountry) throws SQLException {
+    queryCount++;
+    try (PreparedStatement statement = connection.prepareStatement("""
+      select manual_review_threshold
+      from split_consignment_rule
+      where goods_category_code = ?
+          and origin_country = ?
+      """)) {
+      statement.setString(1, goodsCategoryCode);
+      statement.setString(2, originCountry);
+      try (ResultSet resultSet = statement.executeQuery()) {
+        if (resultSet.next()) {
+          return Optional.of(resultSet.getBigDecimal("manual_review_threshold"));
+        }
+      }
+    }
+    return Optional.empty();
+  }
+
+  public Map<SplitConsignmentRuleKey, BigDecimal> findSplitConsignmentThresholds(Collection<SplitConsignmentRuleKey> keys) throws SQLException {
+    if (keys.isEmpty()) {
+      return Map.of();
+    }
+    queryCount++;
+    Map<SplitConsignmentRuleKey, BigDecimal> result = new HashMap<>();
+    try (PreparedStatement statement = connection.prepareStatement("""
+      select goods_category_code, origin_country, manual_review_threshold
+      from split_consignment_rule
+      where (goods_category_code, origin_country) in (
+      """ + tuplePlaceholders(keys.size()) + ")")) {
+      int index = 1;
+      for (SplitConsignmentRuleKey key : keys) {
+        statement.setString(index++, key.goodsCategoryCode());
+        statement.setString(index++, key.originCountry());
+      }
+      try (ResultSet resultSet = statement.executeQuery()) {
+        while (resultSet.next()) {
+          result.put(
+            new SplitConsignmentRuleKey(
+              resultSet.getString("goods_category_code"),
+              resultSet.getString("origin_country")
+            ),
+            resultSet.getBigDecimal("manual_review_threshold")
+          );
         }
       }
     }
@@ -261,6 +335,24 @@ public class ReferenceDatabase implements AutoCloseable {
         for (int risk = 1; risk <= 20; risk++) {
           statement.setString(1, "CAT-" + padded(category, 3));
           statement.setString(2, "RISK-" + padded(risk, 2));
+          statement.addBatch();
+        }
+      }
+      statement.executeBatch();
+    }
+  }
+
+  private void insertSplitConsignmentRules() throws SQLException {
+    try (PreparedStatement statement = connection.prepareStatement("""
+      insert into split_consignment_rule(goods_category_code, origin_country, manual_review_threshold)
+      values (?, ?, ?)
+      """)) {
+      String[] originCountries = {"EE", "LV", "LT", "FI", "SE", "DE", "PL", "NL", "CN", "US"};
+      for (int category = 1; category <= 80; category++) {
+        for (String originCountry : originCountries) {
+          statement.setString(1, "CAT-" + padded(category, 3));
+          statement.setString(2, originCountry);
+          statement.setBigDecimal(3, new BigDecimal("10000.00"));
           statement.addBatch();
         }
       }

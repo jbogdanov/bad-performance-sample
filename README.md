@@ -21,21 +21,27 @@ com.bogdanov.performance
 └── v2
 ```
 
-V1 is intentionally wrong: for every declaration it performs three full scans of the input list, and each scan executes a database query. That means the total query count is:
+V1 is intentionally naive: for every declaration it performs three database lookups, then runs a second loop over the whole input file for split-consignment detection. That means the work is:
 
 ```text
-3 * n * n
+3 * n database queries
+n * n split-consignment rule database queries
 ```
 
-For a single declaration this is still at least three database calls. For larger batches the database calls grow quadratically.
+For a single declaration this is still at least three database calls. For larger batches the business rule grows quadratically.
+
+The second loop exists for a real customs/tax scenario: split-consignment detection. If multiple declarations in the same input file share the same sender, receiver, goods category, and origin country, V1 totals their combined declared value by scanning the whole input file for each declaration. Every comparison asks the database for the relevant split-consignment rule by goods category and origin country. When the combined value is above the rule's manual-review threshold, those records are flagged as `manualReviewRecords`.
 
 V2 keeps the same response contract but loads only the requested reference data in 1000-record batches:
 
 ```text
 3 database queries per 1000-record batch
+1 split-consignment rule query per request
 ```
 
 Each batch uses `where ... in (...)` queries for sender references, receiver references, and goods category/risk pairs. The CPU work is still a simple input scan, but the database layer no longer performs per-record lookups.
+
+V2 handles split-consignment detection with grouping instead of a nested scan, and loads only the split-consignment rules referenced by the input list.
 
 ## Local PostgreSQL
 
@@ -95,6 +101,7 @@ The response contains timing and query-count metrics:
 {
   "records": 1,
   "validRecords": 1,
+  "manualReviewRecords": 0,
   "databaseQueries": 3,
   "totalMillis": 5.0,
   "averageMillisPerRecord": 5.0
@@ -109,16 +116,4 @@ The MockMvc integration tests use Testcontainers with PostgreSQL.
 ./gradlew test
 ```
 
-Default tests exclude the largest V1 cases because they are intentionally brutal against real PostgreSQL. To include them:
-
-```bash
-./gradlew test -DincludeSlowTests=true
-```
-
-The V1 5000 item test performs:
-
-```text
-3 * 5000 * 5000 = 75,000,000 database queries
-```
-
-The V2 5000 item test performs only 15 database queries.
+The V2 5000 item test performs only 16 database queries.
